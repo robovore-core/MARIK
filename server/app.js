@@ -1,0 +1,453 @@
+import express from 'express'
+import { MongoClient } from 'mongodb'
+import dotenv from 'dotenv'
+import cors from 'cors'
+import session from 'express-session'
+import passport from 'passport'
+import { Strategy as GoogleStrategy } from 'passport-google-oauth20'
+import { randomUUID } from 'node:crypto'
+
+dotenv.config({ path: './server/.env' })
+
+const app = express()
+app.use(cors())
+app.use(express.json())
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || 'fabil-dev-session-secret',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      sameSite: 'lax',
+      secure: false,
+      maxAge: 1000 * 60 * 60 * 24 * 14,
+    },
+  }),
+)
+app.use(passport.initialize())
+app.use(passport.session())
+
+const client = new MongoClient(process.env.MONGODB_URI)
+await client.connect()
+const db = client.db(process.env.MONGODB_DB)
+const comments = db.collection('comments')
+const clubs = db.collection('clubs')
+const books = db.collection('books')
+const clubMembers = db.collection('clubMembers')
+const users = db.collection('users')
+
+const googleClientId = process.env.GOOGLE_CLIENT_ID
+const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET
+const authEnabled = Boolean(googleClientId && googleClientSecret)
+const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
+const callbackUrl = process.env.GOOGLE_CALLBACK_URL || `${frontendUrl}/auth/google/callback`
+
+function toMemberId(displayName, email) {
+  const normalizedName = (displayName ?? '').trim().toLowerCase().replace(/\s+/g, '-')
+  const normalizedEmail = (email ?? '').trim().toLowerCase()
+  const basis = normalizedEmail || normalizedName || randomUUID()
+  return `member-${basis.replace(/[^a-z0-9@._-]/g, '')}`
+}
+
+passport.serializeUser((user, done) => {
+  done(null, user.googleId)
+})
+
+passport.deserializeUser(async (googleId, done) => {
+  try {
+    const user = await users.findOne({ googleId })
+    done(null, user || null)
+  } catch (error) {
+    done(error)
+  }
+})
+
+if (authEnabled) {
+  passport.use(
+    new GoogleStrategy(
+      {
+        clientID: googleClientId,
+        clientSecret: googleClientSecret,
+          callbackURL: callbackUrl,
+      },
+      async (_accessToken, _refreshToken, profile, done) => {
+        try {
+          const email = profile.emails?.[0]?.value ?? ''
+          const displayName = profile.displayName || email || 'Reader'
+          const colorSeed = (profile.id?.charCodeAt(0) ?? 97) % 5
+          const palette = ['#a56cc7', '#d16c7a', '#5d8fd1', '#4f9d69', '#b17d5d']
+          const commentColor = palette[colorSeed]
+
+          const update = {
+            $set: {
+              googleId: profile.id,
+              email,
+              displayName,
+              avatarUrl: profile.photos?.[0]?.value ?? '',
+              commentColor,
+              updatedAt: new Date().toISOString(),
+            },
+            $setOnInsert: {
+              createdAt: new Date().toISOString(),
+            },
+          }
+
+          await users.updateOne({ googleId: profile.id }, update, { upsert: true })
+          const user = await users.findOne({ googleId: profile.id })
+          done(null, user)
+        } catch (error) {
+          done(error)
+        }
+      },
+    ),
+  )
+}
+
+app.get('/auth/google', (req, res, next) => {
+  if (!authEnabled) {
+    return res.status(503).json({ error: 'Google auth is not configured.' })
+  }
+
+  return passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next)
+})
+
+app.get('/auth/google/callback', (req, res, next) => {
+  if (!authEnabled) {
+    return res.redirect(`${frontendUrl}?auth=disabled`)
+  }
+
+  return passport.authenticate('google', { failureRedirect: `${frontendUrl}?auth=failed` })(req, res, () => {
+    res.redirect(frontendUrl)
+  })
+})
+
+app.get('/auth/me', (req, res) => {
+  if (!req.user) {
+    return res.status(200).json({ authenticated: false })
+  }
+
+  const user = req.user
+  return res.status(200).json({
+    authenticated: true,
+    user: {
+      googleId: user.googleId,
+      displayName: user.displayName,
+      email: user.email ?? '',
+      commentColor: user.commentColor ?? '#a56cc7',
+      avatarUrl: user.avatarUrl ?? '',
+    },
+  })
+})
+
+app.post('/auth/logout', (req, res) => {
+  req.logout((error) => {
+    if (error) {
+      return res.status(500).json({ error: 'Unable to log out.' })
+    }
+
+    req.session.destroy(() => {
+      res.clearCookie('connect.sid')
+      res.status(200).json({ loggedOut: true })
+    })
+  })
+})
+
+app.get('/api/catalog', async (_req, res) => {
+  const clubDocs = await clubs.find({}).sort({ name: 1 }).toArray()
+  const clubIds = clubDocs.map((club) => club.id)
+
+  const [bookDocs, memberDocs] = await Promise.all([
+    clubIds.length ? books.find({ clubId: { $in: clubIds } }).toArray() : Promise.resolve([]),
+    clubIds.length ? clubMembers.find({ clubId: { $in: clubIds } }).toArray() : Promise.resolve([]),
+  ])
+
+  const booksByClubId = new Map()
+  const membersByClubId = new Map()
+
+  bookDocs.forEach((book) => {
+    const current = booksByClubId.get(book.clubId) ?? []
+    current.push({
+      id: book.id,
+      title: book.title,
+      author: book.author,
+      content: book.content,
+      comments: [],
+    })
+    booksByClubId.set(book.clubId, current)
+  })
+
+  memberDocs.forEach((member) => {
+    const current = membersByClubId.get(member.clubId) ?? []
+    current.push({
+      id: member.id || toMemberId(member.displayName, member.email),
+      displayName: member.displayName,
+      email: member.email ?? '',
+      commentColor: member.commentColor,
+    })
+    membersByClubId.set(member.clubId, current)
+  })
+
+  const payload = clubDocs.map((club) => ({
+    id: club.id,
+    name: club.name,
+    summary: club.summary,
+    books: booksByClubId.get(club.id) ?? [],
+    members: membersByClubId.get(club.id) ?? [],
+  }))
+
+  return res.json(payload)
+})
+
+app.post('/api/catalog-sync', async (req, res) => {
+  const { clubs: incomingClubs, userProfile, selectedClubId } = req.body ?? {}
+
+  if (!Array.isArray(incomingClubs)) {
+    return res.status(400).json({ error: 'clubs must be an array.' })
+  }
+
+  const clubOps = []
+  const bookOps = []
+  const memberOps = []
+  const userOps = []
+  const memberIdsByClub = new Map()
+
+  incomingClubs.forEach((club) => {
+    if (!club?.id || !club?.name || !club?.summary) {
+      return
+    }
+
+    clubOps.push({
+      updateOne: {
+        filter: { id: club.id },
+        update: {
+          $set: {
+            id: club.id,
+            name: club.name,
+            summary: club.summary,
+            updatedAt: new Date().toISOString(),
+          },
+        },
+        upsert: true,
+      },
+    })
+
+    if (Array.isArray(club.books)) {
+      club.books.forEach((book) => {
+        if (!book?.id || !book?.title || !book?.author || !book?.content) {
+          return
+        }
+
+        bookOps.push({
+          updateOne: {
+            filter: { id: book.id },
+            update: {
+              $set: {
+                id: book.id,
+                clubId: club.id,
+                title: book.title,
+                author: book.author,
+                content: book.content,
+                updatedAt: new Date().toISOString(),
+              },
+            },
+            upsert: true,
+          },
+        })
+      })
+    }
+
+    if (Array.isArray(club.members)) {
+      const memberIds = new Set()
+
+      club.members.forEach((member) => {
+        if (!member?.displayName || !member?.commentColor) {
+          return
+        }
+
+        const displayName = String(member.displayName).trim()
+        const email = typeof member.email === 'string' ? member.email.trim().toLowerCase() : ''
+        const id = typeof member.id === 'string' && member.id ? member.id : toMemberId(displayName, email)
+
+        memberIds.add(id)
+
+        memberOps.push({
+          updateOne: {
+            filter: {
+              clubId: club.id,
+              id,
+            },
+            update: {
+              $set: {
+                id,
+                clubId: club.id,
+                displayName,
+                email,
+                commentColor: member.commentColor,
+                updatedAt: new Date().toISOString(),
+              },
+              $setOnInsert: {
+                createdAt: new Date().toISOString(),
+              },
+            },
+            upsert: true,
+          },
+        })
+
+        userOps.push({
+          updateOne: {
+            filter: email ? { email } : { displayName },
+            update: {
+              $set: {
+                displayName,
+                email,
+                commentColor: member.commentColor,
+                updatedAt: new Date().toISOString(),
+              },
+              $setOnInsert: {
+                createdAt: new Date().toISOString(),
+              },
+            },
+            upsert: true,
+          },
+        })
+      })
+
+      memberIdsByClub.set(club.id, memberIds)
+    }
+  })
+
+  if (userProfile?.displayName && userProfile?.commentColor) {
+    const clubsForMembership =
+      typeof selectedClubId === 'string' && selectedClubId
+        ? [selectedClubId]
+        : incomingClubs.map((club) => club?.id).filter(Boolean)
+
+    clubsForMembership.forEach((clubId) => {
+      const id = toMemberId(userProfile.displayName, typeof userProfile.email === 'string' ? userProfile.email : '')
+
+      const currentMemberIds = memberIdsByClub.get(clubId) ?? new Set()
+      currentMemberIds.add(id)
+      memberIdsByClub.set(clubId, currentMemberIds)
+
+      memberOps.push({
+        updateOne: {
+          filter: {
+            clubId,
+            id,
+          },
+          update: {
+            $set: {
+              id,
+              clubId,
+              displayName: userProfile.displayName,
+              email: typeof userProfile.email === 'string' ? userProfile.email : '',
+              commentColor: userProfile.commentColor,
+              updatedAt: new Date().toISOString(),
+            },
+            $setOnInsert: {
+              createdAt: new Date().toISOString(),
+            },
+          },
+          upsert: true,
+        },
+      })
+
+      userOps.push({
+        updateOne: {
+          filter:
+            typeof userProfile.email === 'string' && userProfile.email
+              ? { email: userProfile.email }
+              : { displayName: userProfile.displayName },
+          update: {
+            $set: {
+              displayName: userProfile.displayName,
+              email: typeof userProfile.email === 'string' ? userProfile.email : '',
+              commentColor: userProfile.commentColor,
+              updatedAt: new Date().toISOString(),
+            },
+            $setOnInsert: {
+              createdAt: new Date().toISOString(),
+            },
+          },
+          upsert: true,
+        },
+      })
+    })
+  }
+
+  if (clubOps.length) {
+    await clubs.bulkWrite(clubOps, { ordered: false })
+  }
+
+  if (bookOps.length) {
+    await books.bulkWrite(bookOps, { ordered: false })
+  }
+
+  if (memberOps.length) {
+    await clubMembers.bulkWrite(memberOps, { ordered: false })
+  }
+
+  if (memberIdsByClub.size) {
+    await Promise.all(
+      [...memberIdsByClub.entries()].map(([clubId, memberIds]) =>
+        clubMembers.deleteMany({
+          clubId,
+          id: { $nin: [...memberIds] },
+        }),
+      ),
+    )
+  }
+
+  if (userOps.length) {
+    await users.bulkWrite(userOps, { ordered: false })
+  }
+
+  return res.status(200).json({
+    synced: true,
+    clubs: clubOps.length,
+    books: bookOps.length,
+    members: memberOps.length,
+    users: userOps.length,
+  })
+})
+
+app.get('/api/comments', async (req, res) => {
+  const { bookId } = req.query
+
+  if (!bookId || typeof bookId !== 'string') {
+    return res.status(400).json({ error: 'bookId query parameter is required.' })
+  }
+
+  const docs = await comments.find({ bookId }).sort({ createdAt: -1 }).toArray()
+  return res.json(docs)
+})
+
+app.post('/api/comments', async (req, res) => {
+  const { id, bookId, author, text, quote, type, parentCommentId = null } = req.body ?? {}
+
+  if (!id || !bookId || !author || !text || !quote || !type) {
+    return res.status(400).json({
+      error: 'id, bookId, author, text, quote, and type are required.',
+    })
+  }
+
+  if (type !== 'underline' && type !== 'highlight') {
+    return res.status(400).json({ error: "type must be 'underline' or 'highlight'." })
+  }
+
+  const doc = {
+    id,
+    bookId,
+    author,
+    text,
+    quote,
+    type,
+    parentCommentId,
+    createdAt: new Date().toISOString(),
+  }
+
+  const result = await comments.insertOne(doc)
+  return res.status(201).json({ ...doc, _id: result.insertedId })
+})
+
+app.listen(4000, () => console.log('API running on 4000'))
