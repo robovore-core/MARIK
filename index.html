@@ -125,6 +125,7 @@
     <script>
       const authLink = document.getElementById('google-auth-link')
       const configuredApiBase = '%VITE_API_BASE_URL%'
+      const defaultRemoteApiBase = 'https://marik-api.onrender.com'
 
       function normalizeBasePath(pathname) {
         const withoutIndex = pathname.replace(/\/index\.html$/, '')
@@ -148,9 +149,10 @@
           window.location.hostname === 'localhost' && window.location.port !== '4000'
             ? 'http://localhost:4000'
             : ''
-        const authBase = configuredApiBase && !configuredApiBase.includes('VITE_API_BASE_URL')
+        const hasConfiguredApiBase = configuredApiBase && !configuredApiBase.includes('VITE_API_BASE_URL')
+        const authBase = hasConfiguredApiBase
           ? configuredApiBase.replace(/\/+$/, '')
-          : devAuthBase
+          : (devAuthBase || defaultRemoteApiBase)
 
         if (authLink instanceof HTMLAnchorElement) {
           const authPath = joinPath(appBasePath, 'auth/google')

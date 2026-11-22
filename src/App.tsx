@@ -52,6 +52,7 @@ const STORAGE_KEY = 'fabil-book-club-v1'
 const DEFAULT_COMMENT_COLOR = '#a56cc7'
 const PAGE_CHARACTER_TARGET = 1600
 const API_BASE_URL = ((import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '').trim().replace(/\/$/, '')
+const DEFAULT_REMOTE_API_BASE = 'https://marik-api.onrender.com'
 
 type ApiCommentDocument = {
   id: string
@@ -138,6 +139,18 @@ function normalizeBasePath(pathname: string): string {
 function frontendBaseUrl(): string {
   const basePath = normalizeBasePath(window.location.pathname)
   return `${window.location.origin}${basePath === '/' ? '' : basePath}`
+}
+
+function resolveAuthBaseUrl(): string {
+  if (API_BASE_URL) {
+    return API_BASE_URL
+  }
+
+  if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+    return ''
+  }
+
+  return DEFAULT_REMOTE_API_BASE
 }
 
 const EXAMPLE_TEXT = `Chapter 1\n\nThe old library clock sang six notes when Mira stepped into the reading room. Dust floated like quiet applause in the gold light, and every table held the gentle evidence of shared attention: a pencil left open to a margin, a tea stain shaped like a crescent moon, a folded page waiting for a friend to catch up.\n\nShe opened the book to the marked chapter and smiled at the underline that someone had drawn beneath a single sentence: "A story is only finished when someone else reads it."\n\nChapter 2\n\nBy the second week, the club began to notice each other in the annotations. Theo circled difficult words and wrote definitions in tiny, careful letters. Hana asked bold questions in the margins. Jules answered those questions two pages later. What began as solitary reading became a conversation unfolding in ink and time.`
@@ -1171,9 +1184,10 @@ function App() {
   }
 */
   function startGoogleSignIn() {
-  const frontendUrl = encodeURIComponent(frontendBaseUrl())
-  window.location.href = `${API_BASE_URL}/auth/google?frontendUrl=${frontendUrl}`
-}
+    const frontendUrl = encodeURIComponent(frontendBaseUrl())
+    const authBase = resolveAuthBaseUrl()
+    window.location.href = `${authBase}/auth/google?frontendUrl=${frontendUrl}`
+  }
 
   async function handleSignOut() {
     try {
