@@ -1169,7 +1169,7 @@ function App() {
       })
     }
   }
-
+/*
   function startGoogleSignIn() {
     const basePath = normalizeBasePath(window.location.pathname)
     const authPath = joinPath(basePath, 'auth/google')
@@ -1177,6 +1177,11 @@ function App() {
     const authEndpoint = API_BASE_URL ? `${API_BASE_URL}${authPath}` : `${authPath}`
     window.location.href = `${authEndpoint}?frontendUrl=${frontendUrl}`
   }
+*/
+  function startGoogleSignIn() {
+  const frontendUrl = encodeURIComponent(frontendBaseUrl())
+  window.location.href = `${API_BASE_URL}/auth/google?frontendUrl=${frontendUrl}`
+}
 
   async function handleSignOut() {
     try {
