@@ -158,7 +158,8 @@ const users = db.collection('users')
 const googleClientId = process.env.GOOGLE_CLIENT_ID
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET
 const authEnabled = Boolean(googleClientId && googleClientSecret)
-const callbackUrl = process.env.GOOGLE_CALLBACK_URL || `${frontendUrl}/auth/google/callback`
+//const callbackUrl = process.env.GOOGLE_CALLBACK_URL || `${frontendUrl}/auth/google/callback`
+const callbackUrl = process.env.GOOGLE_CALLBACK_URL;
 
 function sanitizeFrontendUrl(value) {
   if (typeof value !== 'string' || !value.trim()) {
@@ -273,7 +274,7 @@ app.get('/auth/google', (req, res, next) => {
 
     return passport.authenticate('google', {
       scope: ['profile', 'email'],
-      callbackURL: dynamicCallbackUrl,
+      callbackURL: callbackUrl,
     })(req, res, next)
   })
 })
@@ -288,7 +289,7 @@ app.get('/auth/google/callback', (req, res, next) => {
 
   return passport.authenticate('google', {
     failureRedirect: `${returnTo}?auth=failed`,
-    callbackURL: dynamicCallbackUrl,
+    callbackURL: callbackUrl,
   })(req, res, () => {
     if (req.session) {
       delete req.session.oauthReturnTo
