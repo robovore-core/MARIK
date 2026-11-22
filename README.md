@@ -1,32 +1,90 @@
-# React + TypeScript + Vite
+# MARIK
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+MARIK is a reading-club web app with:
 
-Currently, two official plugins are available:
+- React + Vite frontend
+- Express API backend
+- MongoDB persistence
+- Google OAuth authentication
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Local Development
 
-## React Compiler
+Install dependencies:
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+```bash
+npm install
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+Create environment files:
+
+- Root `.env.local` (frontend)
+
+```env
+VITE_API_BASE_URL=
+```
+
+- `server/.env` (backend)
+
+```env
+MONGODB_URI=your-mongodb-uri
+MONGODB_DB=your-db-name
+SESSION_SECRET=replace-with-a-strong-secret
+FRONTEND_URL=http://localhost:5173
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+GOOGLE_CALLBACK_URL=http://localhost:5173/auth/google/callback
+```
+
+Run frontend and backend in separate terminals:
+
+```bash
+npm run dev
+```
+
+```bash
+npm run api
+```
+
+## Production Build
+
+Build frontend:
+
+```bash
+npm run build
+```
+
+Start backend:
+
+```bash
+node server/app.js
+```
+
+In production, the backend now serves the built frontend from `dist` and listens on `PORT`.
+
+## Deploy On A Single Domain
+
+Recommended setup is one web service hosting both API and frontend:
+
+1. Build with `npm install && npm run build`.
+2. Start with `node server/app.js`.
+3. Set environment variables:
+   - `NODE_ENV=production`
+   - `PORT` (usually provided by host)
+   - `MONGODB_URI`
+   - `MONGODB_DB`
+   - `SESSION_SECRET`
+   - `FRONTEND_URL=https://your-domain.com`
+   - `GOOGLE_CLIENT_ID`
+   - `GOOGLE_CLIENT_SECRET`
+   - `GOOGLE_CALLBACK_URL=https://your-domain.com/auth/google/callback`
+4. In Google Cloud OAuth settings, add:
+   - Authorized JavaScript origin: `https://your-domain.com`
+   - Authorized redirect URI: `https://your-domain.com/auth/google/callback`
+
+## Optional CORS Origins
+
+If you need extra allowed origins (for preview domains), set:
+
+```env
+ADDITIONAL_CORS_ORIGINS=https://preview1.example.com,https://preview2.example.com
+```

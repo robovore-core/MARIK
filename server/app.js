@@ -7,11 +7,19 @@ import passport from 'passport'
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20'
 import { randomUUID } from 'node:crypto'
 import dns from 'node:dns'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 dotenv.config({ path: './server/.env' })
 
 const dnsServers =
   process.env.DNS_SERVERS?.split(',').map((server) => server.trim()).filter(Boolean) || ['1.1.1.1', '8.8.8.8']
+
+const isProduction = process.env.NODE_ENV === 'production'
+const port = Number.parseInt(process.env.PORT || '4000', 10)
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const distPath = path.resolve(__dirname, '../dist')
 
 try {
   dns.setServers(dnsServers)
@@ -22,7 +30,23 @@ try {
 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
 const app = express()
 app.set('trust proxy', 1)
-app.use(cors())
+const allowedOrigins = [
+  frontendUrl,
+  ...(process.env.ADDITIONAL_CORS_ORIGINS?.split(',').map((origin) => origin.trim()).filter(Boolean) || []),
+]
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true)
+      }
+
+      return callback(new Error('Not allowed by CORS'))
+    },
+    credentials: true,
+  }),
+)
 app.use(express.json())
 app.use(
   session({
@@ -33,7 +57,7 @@ app.use(
     cookie: {
       // Lax is more reliable for OAuth in local dev proxies/tunnels.
       sameSite: 'lax',
-      secure: false,
+      secure: isProduction,
       httpOnly: true,
       maxAge: 1000 * 60 * 60 * 24 * 14,
     },
@@ -534,4 +558,11 @@ app.post('/api/comments', async (req, res) => {
   return res.status(201).json({ ...doc, _id: result.insertedId })
 })
 
-app.listen(4000, () => console.log('API running on 4000'))
+if (isProduction) {
+  app.use(express.static(distPath))
+  app.get(/^\/(?!api|auth).*/, (_req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'))
+  })
+}
+
+app.listen(port, () => console.log(`API running on ${port}`))
