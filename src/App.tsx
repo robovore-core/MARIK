@@ -135,14 +135,6 @@ function normalizeBasePath(pathname: string): string {
   return trimmed || '/'
 }
 
-function joinPath(base: string, segment: string): string {
-  if (base === '/') {
-    return `/${segment}`
-  }
-
-  return `${base}/${segment}`
-}
-
 function frontendBaseUrl(): string {
   const basePath = normalizeBasePath(window.location.pathname)
   return `${window.location.origin}${basePath === '/' ? '' : basePath}`
