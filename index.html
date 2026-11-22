@@ -96,12 +96,6 @@
         transform: translateY(-1px);
       }
 
-      .btn-primary {
-        background: #121212;
-        color: #ffffff;
-        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
-      }
-
       .btn-secondary {
         background: #ffffff;
         color: #121212;
@@ -118,7 +112,6 @@
             Meow meow meow!
           </p>
           <div class="actions">
-            <a id="app-entry-link" class="btn btn-primary" href="/" aria-label="Open app">Open MARIK</a>
             <a id="google-auth-link" class="btn btn-secondary" href="/auth/google" aria-label="Sign in with Google">
               Sign in with Google
             </a>
@@ -130,13 +123,15 @@
       MARIK works best with JavaScript enabled. Please enable JavaScript to use the full app.
     </noscript>
     <script>
-      const appLink = document.getElementById('app-entry-link')
       const authLink = document.getElementById('google-auth-link')
 
       function normalizeBasePath(pathname) {
         const withoutIndex = pathname.replace(/\/index\.html$/, '')
         const trimmed = withoutIndex.replace(/\/+$/, '')
-        return trimmed || '/'
+        const normalized = trimmed || '/'
+
+        // Keep OAuth callback URLs canonical to avoid case-sensitive mismatches.
+        return normalized.toLowerCase()
       }
 
       function joinPath(base, segment) {
@@ -147,13 +142,9 @@
         return `${base}/${segment}`
       }
 
-      if (authLink instanceof HTMLAnchorElement || appLink instanceof HTMLAnchorElement) {
+      if (authLink instanceof HTMLAnchorElement) {
         const appBasePath = normalizeBasePath(window.location.pathname)
         const frontendUrl = encodeURIComponent(`${window.location.origin}${appBasePath === '/' ? '' : appBasePath}`)
-
-        if (appLink instanceof HTMLAnchorElement) {
-          appLink.href = appBasePath
-        }
 
         const authBase =
           window.location.hostname === 'localhost' && window.location.port !== '4000'
