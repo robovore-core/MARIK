@@ -118,7 +118,7 @@
             A shared reading space for clubs to annotate passages, discuss ideas, and keep every comment in context.
           </p>
           <div class="actions">
-            <a class="btn btn-primary" href="/" aria-label="Open app">Open MARIK</a>
+            <a id="app-entry-link" class="btn btn-primary" href="/" aria-label="Open app">Open MARIK</a>
             <a id="google-auth-link" class="btn btn-secondary" href="/auth/google" aria-label="Sign in with Google">
               Sign in with Google
             </a>
@@ -130,10 +130,40 @@
       MARIK works best with JavaScript enabled. Please enable JavaScript to use the full app.
     </noscript>
     <script>
+      const appLink = document.getElementById('app-entry-link')
       const authLink = document.getElementById('google-auth-link')
-      if (authLink instanceof HTMLAnchorElement) {
-        const origin = encodeURIComponent(window.location.origin)
-        authLink.href = `/auth/google?frontendUrl=${origin}`
+
+      function normalizeBasePath(pathname) {
+        const withoutIndex = pathname.replace(/\/index\.html$/, '')
+        const trimmed = withoutIndex.replace(/\/+$/, '')
+        return trimmed || '/'
+      }
+
+      function joinPath(base, segment) {
+        if (base === '/') {
+          return `/${segment}`
+        }
+
+        return `${base}/${segment}`
+      }
+
+      if (authLink instanceof HTMLAnchorElement || appLink instanceof HTMLAnchorElement) {
+        const appBasePath = normalizeBasePath(window.location.pathname)
+        const frontendUrl = encodeURIComponent(`${window.location.origin}${appBasePath === '/' ? '' : appBasePath}`)
+
+        if (appLink instanceof HTMLAnchorElement) {
+          appLink.href = appBasePath
+        }
+
+        const authBase =
+          window.location.hostname === 'localhost' && window.location.port !== '4000'
+            ? 'http://localhost:4000'
+            : ''
+
+        if (authLink instanceof HTMLAnchorElement) {
+          const authPath = joinPath(appBasePath, 'auth/google')
+          authLink.href = `${authBase}${authPath}?frontendUrl=${frontendUrl}`
+        }
       }
     </script>
     <script type="module" src="/src/main.tsx"></script>

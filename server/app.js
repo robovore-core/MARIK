@@ -66,9 +66,34 @@ app.use(
 app.use(passport.initialize())
 app.use(passport.session())
 
-const client = new MongoClient(process.env.MONGODB_URI)
-await client.connect()
-const db = client.db(process.env.MONGODB_DB)
+const mongoUri = process.env.MONGODB_URI || process.env.ATLAS_URI || ''
+const mongoUriDirect = process.env.MONGODB_URI_DIRECT || process.env.ATLAS_URI_DIRECT || ''
+const mongoDbName = process.env.MONGODB_DB || process.env.MONGO_DB || undefined
+
+if (!mongoUri && !mongoUriDirect) {
+  throw new Error('Missing MongoDB URI. Set MONGODB_URI (or ATLAS_URI).')
+}
+
+let client
+
+try {
+  if (!mongoUri) {
+    throw new Error('Primary MongoDB URI is not configured.')
+  }
+
+  client = new MongoClient(mongoUri)
+  await client.connect()
+} catch (primaryError) {
+  if (!mongoUriDirect) {
+    throw primaryError
+  }
+
+  console.warn('Primary MongoDB SRV connection failed. Retrying with direct URI fallback.')
+  client = new MongoClient(mongoUriDirect)
+  await client.connect()
+}
+
+const db = client.db(mongoDbName)
 const comments = db.collection('comments')
 const clubs = db.collection('clubs')
 const books = db.collection('books')
@@ -80,7 +105,7 @@ const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET
 const authEnabled = Boolean(googleClientId && googleClientSecret)
 const callbackUrl = process.env.GOOGLE_CALLBACK_URL || `${frontendUrl}/auth/google/callback`
 
-function sanitizeOrigin(value) {
+function sanitizeFrontendUrl(value) {
   if (typeof value !== 'string' || !value.trim()) {
     return null
   }
@@ -91,20 +116,22 @@ function sanitizeOrigin(value) {
       return null
     }
 
-    return parsed.origin
+    const normalizedPath = parsed.pathname.replace(/\/+$/, '')
+    const basePath = normalizedPath === '/' ? '' : normalizedPath
+    return `${parsed.origin}${basePath}`
   } catch {
     return null
   }
 }
 
 function resolveFrontendOrigin(req) {
-  const fromQuery = sanitizeOrigin(req.query?.frontendUrl)
+  const fromQuery = sanitizeFrontendUrl(req.query?.frontendUrl)
   if (fromQuery) {
     return fromQuery
   }
 
   const referer = req.get('referer')
-  const fromReferer = sanitizeOrigin(referer)
+  const fromReferer = sanitizeFrontendUrl(referer)
   if (fromReferer) {
     return fromReferer
   }
@@ -201,8 +228,8 @@ app.get('/auth/google/callback', (req, res, next) => {
     return res.redirect(`${frontendUrl}?auth=disabled`)
   }
 
-  const returnTo = sanitizeOrigin(req.session?.oauthReturnTo) || frontendUrl
-  const dynamicCallbackUrl = sanitizeOrigin(req.session?.oauthCallbackUrl) || callbackUrl
+  const returnTo = sanitizeFrontendUrl(req.session?.oauthReturnTo) || frontendUrl
+  const dynamicCallbackUrl = sanitizeFrontendUrl(req.session?.oauthCallbackUrl) || callbackUrl
 
   return passport.authenticate('google', {
     failureRedirect: `${returnTo}?auth=failed`,
