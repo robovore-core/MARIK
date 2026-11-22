@@ -156,7 +156,8 @@
 
         if (authLink instanceof HTMLAnchorElement) {
           const authPath = joinPath(appBasePath, 'auth/google')
-          authLink.href = `${authBase}${authPath}?frontendUrl=${frontendUrl}`
+          //authLink.href = `${authBase}${authPath}?frontendUrl=${frontendUrl}`
+          authLink.href = `${authBase}/auth/google?frontendUrl=${frontendUrl}`
         }
       }
     </script>
