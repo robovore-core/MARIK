@@ -73,6 +73,39 @@
         line-height: 1.6;
         color: #404040;
       }
+
+      .actions {
+        margin-top: 1.5rem;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+      }
+
+      .btn {
+        appearance: none;
+        border: 1px solid #121212;
+        border-radius: 999px;
+        padding: 0.65rem 1rem;
+        font-size: 0.95rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: transform 150ms ease, box-shadow 150ms ease, background-color 150ms ease;
+      }
+
+      .btn:hover {
+        transform: translateY(-1px);
+      }
+
+      .btn-primary {
+        background: #121212;
+        color: #ffffff;
+        box-shadow: 0 8px 18px rgba(0, 0, 0, 0.18);
+      }
+
+      .btn-secondary {
+        background: #ffffff;
+        color: #121212;
+      }
     </style>
   </head>
   <body>
@@ -84,12 +117,25 @@
           <p>
             A shared reading space for clubs to annotate passages, discuss ideas, and keep every comment in context.
           </p>
+          <div class="actions">
+            <a class="btn btn-primary" href="/" aria-label="Open app">Open MARIK</a>
+            <a id="google-auth-link" class="btn btn-secondary" href="/auth/google" aria-label="Sign in with Google">
+              Sign in with Google
+            </a>
+          </div>
         </section>
       </main>
     </div>
     <noscript>
       MARIK works best with JavaScript enabled. Please enable JavaScript to use the full app.
     </noscript>
+    <script>
+      const authLink = document.getElementById('google-auth-link')
+      if (authLink instanceof HTMLAnchorElement) {
+        const origin = encodeURIComponent(window.location.origin)
+        authLink.href = `/auth/google?frontendUrl=${origin}`
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
