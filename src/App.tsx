@@ -129,6 +129,25 @@ function apiUrl(path: string): string {
   return API_BASE_URL ? `${API_BASE_URL}${path}` : path
 }
 
+function normalizeBasePath(pathname: string): string {
+  const withoutIndex = pathname.replace(/\/index\.html$/i, '')
+  const trimmed = withoutIndex.replace(/\/+$/, '')
+  return trimmed || '/'
+}
+
+function joinPath(base: string, segment: string): string {
+  if (base === '/') {
+    return `/${segment}`
+  }
+
+  return `${base}/${segment}`
+}
+
+function frontendBaseUrl(): string {
+  const basePath = normalizeBasePath(window.location.pathname)
+  return `${window.location.origin}${basePath === '/' ? '' : basePath}`
+}
+
 const EXAMPLE_TEXT = `Chapter 1\n\nThe old library clock sang six notes when Mira stepped into the reading room. Dust floated like quiet applause in the gold light, and every table held the gentle evidence of shared attention: a pencil left open to a margin, a tea stain shaped like a crescent moon, a folded page waiting for a friend to catch up.\n\nShe opened the book to the marked chapter and smiled at the underline that someone had drawn beneath a single sentence: "A story is only finished when someone else reads it."\n\nChapter 2\n\nBy the second week, the club began to notice each other in the annotations. Theo circled difficult words and wrote definitions in tiny, careful letters. Hana asked bold questions in the margins. Jules answered those questions two pages later. What began as solitary reading became a conversation unfolding in ink and time.`
 
 const initialState: AppState = {
@@ -1152,8 +1171,11 @@ function App() {
   }
 
   function startGoogleSignIn() {
-    const origin = encodeURIComponent(window.location.origin)
-    window.location.href = apiUrl(`/auth/google?frontendUrl=${origin}`)
+    const basePath = normalizeBasePath(window.location.pathname)
+    const authPath = joinPath(basePath, 'auth/google')
+    const frontendUrl = encodeURIComponent(frontendBaseUrl())
+    const authEndpoint = API_BASE_URL ? `${API_BASE_URL}${authPath}` : `${authPath}`
+    window.location.href = `${authEndpoint}?frontendUrl=${frontendUrl}`
   }
 
   async function handleSignOut() {
@@ -1182,13 +1204,16 @@ function App() {
 
   if (!authUser) {
     return (
-      <div className="app-shell">
-        <main className="home-grid settings-grid">
-          <section className="panel settings-panel">
-            <h2>Welcome to Fabil</h2>
-            <p>Sign in with Google to access clubs, books, and synced comments.</p>
-            <button type="button" onClick={startGoogleSignIn}>Sign in with Google</button>
-          </section>
+      <div className="landing-shell">
+        <main className="landing-card" aria-label="MARIK homepage">
+          <span className="landing-badge">MARIK</span>
+          <h1>Welcome to MARIK</h1>
+          <p>Meow meow meow!</p>
+          <div className="landing-actions">
+            <button type="button" className="landing-google-button" onClick={startGoogleSignIn}>
+              Sign in with Google
+            </button>
+          </div>
         </main>
       </div>
     )
@@ -1294,7 +1319,7 @@ function App() {
           </NavLink>
         </nav>
       </header>
-
+ 
       <Routes>
         <Route
           path="/"

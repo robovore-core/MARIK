@@ -6,6 +6,70 @@
   animation: rise-in 550ms ease both;
 }
 
+.landing-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+  background: radial-gradient(circle at 15% 10%, #ffe9c6 0%, #f8f8f8 45%, #ececec 100%);
+}
+
+.landing-card {
+  width: min(720px, 100%);
+  background: rgba(255, 255, 255, 0.88);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 18px;
+  padding: 2rem;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.12);
+}
+
+.landing-card h1 {
+  margin: 0 0 0.75rem;
+  font-size: clamp(2rem, 5vw, 3rem);
+  line-height: 1.05;
+}
+
+.landing-card p {
+  margin: 0;
+  line-height: 1.6;
+  color: #404040;
+}
+
+.landing-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.65rem;
+  border-radius: 999px;
+  background: #121212;
+  color: #ffffff;
+  margin-bottom: 1rem;
+}
+
+.landing-actions {
+  margin-top: 1.5rem;
+  display: flex;
+  gap: 0.75rem;
+}
+
+.landing-google-button {
+  border: 1px solid #121212;
+  background: #ffffff;
+  color: #121212;
+  border-radius: 999px;
+  padding: 0.65rem 1rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.landing-google-button:hover {
+  transform: translateY(-1px);
+  filter: none;
+}
+
 .app-header {
   border: 1px solid var(--line);
   background: rgba(248, 242, 231, 0.9);

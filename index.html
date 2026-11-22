@@ -128,10 +128,7 @@
       function normalizeBasePath(pathname) {
         const withoutIndex = pathname.replace(/\/index\.html$/, '')
         const trimmed = withoutIndex.replace(/\/+$/, '')
-        const normalized = trimmed || '/'
-
-        // Keep OAuth callback URLs canonical to avoid case-sensitive mismatches.
-        return normalized.toLowerCase()
+        return trimmed || '/'
       }
 
       function joinPath(base, segment) {

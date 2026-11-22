@@ -21,6 +21,36 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 const distPath = path.resolve(__dirname, '../dist')
 
+function toOrigin(value) {
+  if (typeof value !== 'string' || !value.trim()) {
+    return null
+  }
+
+  try {
+    const parsed = new URL(value)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null
+    }
+
+    return parsed.origin
+  } catch {
+    return null
+  }
+}
+
+function normalizeBasePath(value) {
+  if (typeof value !== 'string' || !value.trim()) {
+    return ''
+  }
+
+  const trimmed = value.trim()
+  if (trimmed === '/') {
+    return ''
+  }
+
+  return `/${trimmed.replace(/^\/+|\/+$/g, '')}`
+}
+
 try {
   dns.setServers(dnsServers)
 } catch (error) {
@@ -28,12 +58,37 @@ try {
 }
 
 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
+const configuredBasePath = normalizeBasePath(process.env.APP_BASE_PATH || '')
+const frontendPathFromUrl = (() => {
+  try {
+    const parsed = new URL(frontendUrl)
+    return normalizeBasePath(parsed.pathname)
+  } catch {
+    return ''
+  }
+})()
+const appBasePath = configuredBasePath || frontendPathFromUrl
 const app = express()
 app.set('trust proxy', 1)
-const allowedOrigins = [
-  frontendUrl,
-  ...(process.env.ADDITIONAL_CORS_ORIGINS?.split(',').map((origin) => origin.trim()).filter(Boolean) || []),
-]
+const additionalOrigins = process.env.ADDITIONAL_CORS_ORIGINS?.split(',').map((origin) => origin.trim()).filter(Boolean) || []
+const allowedOrigins = [frontendUrl, toOrigin(frontendUrl), ...additionalOrigins, ...additionalOrigins.map(toOrigin)].filter(
+  (value, index, list) => Boolean(value) && list.indexOf(value) === index,
+)
+
+if (appBasePath) {
+  app.use((req, _res, next) => {
+    if (req.url === appBasePath) {
+      req.url = '/'
+      return next()
+    }
+
+    if (req.url.startsWith(`${appBasePath}/`)) {
+      req.url = req.url.slice(appBasePath.length) || '/'
+    }
+
+    return next()
+  })
+}
 
 app.use(
   cors({
