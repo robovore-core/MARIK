@@ -124,6 +124,7 @@
     </noscript>
     <script>
       const authLink = document.getElementById('google-auth-link')
+      const configuredApiBase = '%VITE_API_BASE_URL%'
 
       function normalizeBasePath(pathname) {
         const withoutIndex = pathname.replace(/\/index\.html$/, '')
@@ -143,10 +144,13 @@
         const appBasePath = normalizeBasePath(window.location.pathname)
         const frontendUrl = encodeURIComponent(`${window.location.origin}${appBasePath === '/' ? '' : appBasePath}`)
 
-        const authBase =
+        const devAuthBase =
           window.location.hostname === 'localhost' && window.location.port !== '4000'
             ? 'http://localhost:4000'
             : ''
+        const authBase = configuredApiBase && !configuredApiBase.includes('VITE_API_BASE_URL')
+          ? configuredApiBase.replace(/\/+$/, '')
+          : devAuthBase
 
         if (authLink instanceof HTMLAnchorElement) {
           const authPath = joinPath(appBasePath, 'auth/google')

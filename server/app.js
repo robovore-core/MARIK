@@ -58,6 +58,12 @@ try {
 }
 
 const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
+const googleCallbackUrl = process.env.GOOGLE_CALLBACK_URL || `${frontendUrl}/auth/google/callback`
+const frontendOrigin = toOrigin(frontendUrl)
+const callbackOrigin = toOrigin(googleCallbackUrl)
+const useCrossSiteCookies = Boolean(
+  isProduction && frontendOrigin && callbackOrigin && frontendOrigin !== callbackOrigin,
+)
 const configuredBasePath = normalizeBasePath(process.env.APP_BASE_PATH || '')
 const frontendPathFromUrl = (() => {
   try {
@@ -110,8 +116,8 @@ app.use(
     resave: false,
     saveUninitialized: false,
     cookie: {
-      // Lax is more reliable for OAuth in local dev proxies/tunnels.
-      sameSite: 'lax',
+      // Cross-site frontend/backend auth requires SameSite=None + Secure cookies.
+      sameSite: useCrossSiteCookies ? 'none' : 'lax',
       secure: isProduction,
       httpOnly: true,
       maxAge: 1000 * 60 * 60 * 24 * 14,
@@ -158,8 +164,7 @@ const users = db.collection('users')
 const googleClientId = process.env.GOOGLE_CLIENT_ID
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET
 const authEnabled = Boolean(googleClientId && googleClientSecret)
-//const callbackUrl = process.env.GOOGLE_CALLBACK_URL || `${frontendUrl}/auth/google/callback`
-const callbackUrl = process.env.GOOGLE_CALLBACK_URL;
+const callbackUrl = googleCallbackUrl
 
 function sanitizeFrontendUrl(value) {
   if (typeof value !== 'string' || !value.trim()) {
