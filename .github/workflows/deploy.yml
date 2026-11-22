@@ -35,6 +35,8 @@ jobs:
 
       - name: Build Vite project
         run: npm run build
+        env:
+          VITE_API_BASE_URL: https://marik-api.onrender.com
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
