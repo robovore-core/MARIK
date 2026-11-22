@@ -470,6 +470,7 @@ function App() {
   } | null>(null)
 
   const readingSurfaceRef = useRef<HTMLElement | null>(null)
+  const selectionCheckTimeoutRef = useRef<number | null>(null)
   const initialCatalogLoadDoneRef = useRef(false)
   const initialCatalogSyncDoneRef = useRef(false)
 
@@ -483,13 +484,32 @@ function App() {
 
   useEffect(() => {
     const loadSession = async () => {
+      const authParam = new URLSearchParams(window.location.search).get('auth')
+      const attempts = authParam === 'success' ? 8 : 3
+
       try {
-        const session = await fetchAuthSession()
-        if (session.authenticated) {
-          setAuthUser(session.user)
-        } else {
-          setAuthUser(null)
+        for (let attempt = 0; attempt < attempts; attempt += 1) {
+          const session = await fetchAuthSession()
+          if (session.authenticated) {
+            setAuthUser(session.user)
+
+            if (authParam) {
+              const cleanedUrl = new URL(window.location.href)
+              cleanedUrl.searchParams.delete('auth')
+              window.history.replaceState({}, '', cleanedUrl.toString())
+            }
+
+            return
+          }
+
+          if (attempt < attempts - 1) {
+            await new Promise((resolve) => {
+              window.setTimeout(resolve, 350)
+            })
+          }
         }
+
+        setAuthUser(null)
       } catch (error) {
         console.error('Unable to load auth session.', error)
         setAuthUser(null)
@@ -919,6 +939,17 @@ function App() {
     selection.removeAllRanges()
   }
 
+  function scheduleReadingSelectionCheck() {
+    if (selectionCheckTimeoutRef.current !== null) {
+      window.clearTimeout(selectionCheckTimeoutRef.current)
+    }
+
+    // Mobile browsers finalize range coordinates shortly after touchend.
+    selectionCheckTimeoutRef.current = window.setTimeout(() => {
+      handleReadingSelection()
+    }, 120)
+  }
+
   function openCommentBubble(quote: string, target: HTMLElement, comment?: Comment) {
     const rect = target.getBoundingClientRect()
     setCommentPopover({
@@ -1121,7 +1152,8 @@ function App() {
   }
 
   function startGoogleSignIn() {
-    window.location.href = apiUrl('/auth/google')
+    const origin = encodeURIComponent(window.location.origin)
+    window.location.href = apiUrl(`/auth/google?frontendUrl=${origin}`)
   }
 
   async function handleSignOut() {
@@ -1525,7 +1557,8 @@ function App() {
                     <article
                       ref={readingSurfaceRef}
                       className="reading-surface"
-                      onMouseUp={handleReadingSelection}
+                      onMouseUp={scheduleReadingSelectionCheck}
+                      onTouchEnd={scheduleReadingSelectionCheck}
                       onClick={() => {
                         if (commentPopover && commentPopover.mode !== 'new') {
                           setCommentPopover(null)

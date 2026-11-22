@@ -6,20 +6,35 @@ import session from 'express-session'
 import passport from 'passport'
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20'
 import { randomUUID } from 'node:crypto'
+import dns from 'node:dns'
 
 dotenv.config({ path: './server/.env' })
 
+const dnsServers =
+  process.env.DNS_SERVERS?.split(',').map((server) => server.trim()).filter(Boolean) || ['1.1.1.1', '8.8.8.8']
+
+try {
+  dns.setServers(dnsServers)
+} catch (error) {
+  console.warn('Unable to apply custom DNS servers.', error)
+}
+
+const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
 const app = express()
+app.set('trust proxy', 1)
 app.use(cors())
 app.use(express.json())
 app.use(
   session({
     secret: process.env.SESSION_SECRET || 'fabil-dev-session-secret',
+    proxy: true,
     resave: false,
     saveUninitialized: false,
     cookie: {
+      // Lax is more reliable for OAuth in local dev proxies/tunnels.
       sameSite: 'lax',
       secure: false,
+      httpOnly: true,
       maxAge: 1000 * 60 * 60 * 24 * 14,
     },
   }),
@@ -39,8 +54,39 @@ const users = db.collection('users')
 const googleClientId = process.env.GOOGLE_CLIENT_ID
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET
 const authEnabled = Boolean(googleClientId && googleClientSecret)
-const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
 const callbackUrl = process.env.GOOGLE_CALLBACK_URL || `${frontendUrl}/auth/google/callback`
+
+function sanitizeOrigin(value) {
+  if (typeof value !== 'string' || !value.trim()) {
+    return null
+  }
+
+  try {
+    const parsed = new URL(value)
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return null
+    }
+
+    return parsed.origin
+  } catch {
+    return null
+  }
+}
+
+function resolveFrontendOrigin(req) {
+  const fromQuery = sanitizeOrigin(req.query?.frontendUrl)
+  if (fromQuery) {
+    return fromQuery
+  }
+
+  const referer = req.get('referer')
+  const fromReferer = sanitizeOrigin(referer)
+  if (fromReferer) {
+    return fromReferer
+  }
+
+  return frontendUrl
+}
 
 function toMemberId(displayName, email) {
   const normalizedName = (displayName ?? '').trim().toLowerCase().replace(/\s+/g, '-')
@@ -108,7 +154,22 @@ app.get('/auth/google', (req, res, next) => {
     return res.status(503).json({ error: 'Google auth is not configured.' })
   }
 
-  return passport.authenticate('google', { scope: ['profile', 'email'] })(req, res, next)
+  const frontendOrigin = resolveFrontendOrigin(req)
+  const dynamicCallbackUrl = `${frontendOrigin}/auth/google/callback`
+
+  req.session.oauthReturnTo = frontendOrigin
+  req.session.oauthCallbackUrl = dynamicCallbackUrl
+
+  return req.session.save((saveError) => {
+    if (saveError) {
+      return next(saveError)
+    }
+
+    return passport.authenticate('google', {
+      scope: ['profile', 'email'],
+      callbackURL: dynamicCallbackUrl,
+    })(req, res, next)
+  })
 })
 
 app.get('/auth/google/callback', (req, res, next) => {
@@ -116,8 +177,31 @@ app.get('/auth/google/callback', (req, res, next) => {
     return res.redirect(`${frontendUrl}?auth=disabled`)
   }
 
-  return passport.authenticate('google', { failureRedirect: `${frontendUrl}?auth=failed` })(req, res, () => {
-    res.redirect(frontendUrl)
+  const returnTo = sanitizeOrigin(req.session?.oauthReturnTo) || frontendUrl
+  const dynamicCallbackUrl = sanitizeOrigin(req.session?.oauthCallbackUrl) || callbackUrl
+
+  return passport.authenticate('google', {
+    failureRedirect: `${returnTo}?auth=failed`,
+    callbackURL: dynamicCallbackUrl,
+  })(req, res, () => {
+    if (req.session) {
+      delete req.session.oauthReturnTo
+      delete req.session.oauthCallbackUrl
+
+      return req.session.save((saveError) => {
+        if (saveError) {
+          return next(saveError)
+        }
+
+        const successUrl = new URL(returnTo)
+        successUrl.searchParams.set('auth', 'success')
+        return res.redirect(successUrl.toString())
+      })
+    }
+
+    const successUrl = new URL(returnTo)
+    successUrl.searchParams.set('auth', 'success')
+    return res.redirect(successUrl.toString())
   })
 })
 
