@@ -238,6 +238,46 @@
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--profile-accent, var(--violet-1)) 20%, transparent);
 }
 
+.profile-menu {
+  position: relative;
+}
+
+.profile-menu-panel {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  right: 0;
+  width: 11rem;
+  border: 1px solid rgba(94, 75, 102, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 252, 245, 0.98);
+  box-shadow: 0 16px 30px rgba(78, 60, 84, 0.16);
+  padding: 0.35rem;
+  display: grid;
+  gap: 0.25rem;
+  z-index: 20;
+}
+
+.profile-menu-item {
+  width: 100%;
+  text-align: left;
+  text-decoration: none;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--ink-1);
+  background: transparent;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.86rem;
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.profile-menu-item:hover {
+  background: rgba(255, 252, 245, 0.9);
+  border-color: rgba(94, 75, 102, 0.2);
+  transform: none;
+  filter: none;
+}
+
 .settings-grid {
   grid-template-columns: 1fr;
 }
@@ -1050,6 +1090,16 @@ button:active {
   .top-nav {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
+  }
+
+  .profile-menu {
+    width: 100%;
+  }
+
+  .profile-menu-panel {
+    left: 0;
+    right: auto;
+    width: 100%;
   }
 
   .reading-surface {

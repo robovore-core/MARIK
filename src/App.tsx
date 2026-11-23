@@ -467,6 +467,7 @@ function App() {
   const [selectedClubId, setSelectedClubId] = useState<string>(state.clubs[0]?.id ?? '')
   const [selectedBookId, setSelectedBookId] = useState<string>(state.clubs[0]?.books[0]?.id ?? '')
   const [clubMenuOpen, setClubMenuOpen] = useState(false)
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false)
   const [bookModalOpen, setBookModalOpen] = useState(false)
   const [clubSettingsOpen, setClubSettingsOpen] = useState(false)
 
@@ -1195,6 +1196,7 @@ function App() {
     } catch (error) {
       console.error('Unable to sign out.', error)
     } finally {
+      setProfileMenuOpen(false)
       setAuthUser(null)
       setAuthLoading(false)
     }
@@ -1304,23 +1306,39 @@ function App() {
 
         </div>
 
-        <p className="app-brand" aria-label="Fabil brand">fabil</p>
+        <p className="app-brand" aria-label="Fabil brand">marik</p>
 
         <nav className="top-nav" aria-label="Header navigation">
           <span className="top-nav-user" title={authUser.email}>{authUser.displayName}</span>
-          <button type="button" className="top-nav-button" onClick={handleSignOut} aria-label="Sign out">
-            <span aria-hidden="true">↗</span>
-          </button>
-          <NavLink
-            to="/account"
-            aria-label="Open account"
-            className={({ isActive }) =>
-              isActive ? 'top-nav-button profile-nav-button active' : 'top-nav-button profile-nav-button'
-            }
-            style={{ '--profile-accent': state.userProfile.commentColor } as CSSProperties}
-          >
-            <span aria-hidden="true">👤</span>
-          </NavLink>
+          <div className="profile-menu">
+            <button
+              type="button"
+              aria-label="Open profile menu"
+              aria-haspopup="menu"
+              aria-expanded={profileMenuOpen}
+              className={profileMenuOpen ? 'top-nav-button profile-nav-button active' : 'top-nav-button profile-nav-button'}
+              style={{ '--profile-accent': state.userProfile.commentColor } as CSSProperties}
+              onClick={() => setProfileMenuOpen((open) => !open)}
+            >
+              <span aria-hidden="true">👤</span>
+            </button>
+
+            {profileMenuOpen ? (
+              <div className="profile-menu-panel" role="menu" aria-label="Profile menu">
+                <NavLink
+                  to="/account"
+                  className="profile-menu-item"
+                  role="menuitem"
+                  onClick={() => setProfileMenuOpen(false)}
+                >
+                  Account
+                </NavLink>
+                <button type="button" className="profile-menu-item" role="menuitem" onClick={handleSignOut}>
+                  Sign out
+                </button>
+              </div>
+            ) : null}
+          </div>
           <NavLink
             to="/settings"
             aria-label="Open settings"
