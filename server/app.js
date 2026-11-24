@@ -3,6 +3,7 @@ import { MongoClient } from 'mongodb'
 import dotenv from 'dotenv'
 import cors from 'cors'
 import session from 'express-session'
+import MongoStore from 'connect-mongo'
 import passport from 'passport'
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20'
 import { randomUUID } from 'node:crypto'
@@ -129,23 +130,6 @@ app.use(
   }),
 )
 app.use(express.json())
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || 'fabil-dev-session-secret',
-    proxy: true,
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      // Cross-site frontend/backend auth requires SameSite=None + Secure cookies.
-      sameSite: useCrossSiteCookies ? 'none' : 'lax',
-      secure: isProduction,
-      httpOnly: true,
-      maxAge: 1000 * 60 * 60 * 24 * 14,
-    },
-  }),
-)
-app.use(passport.initialize())
-app.use(passport.session())
 
 const mongoUri = process.env.MONGODB_URI || process.env.ATLAS_URI || ''
 const mongoUriDirect = process.env.MONGODB_URI_DIRECT || process.env.ATLAS_URI_DIRECT || ''
@@ -180,6 +164,32 @@ const clubs = db.collection('clubs')
 const books = db.collection('books')
 const clubMembers = db.collection('clubMembers')
 const users = db.collection('users')
+const sessionStore = MongoStore.create({
+  client,
+  dbName: db.databaseName,
+  collectionName: process.env.SESSION_COLLECTION_NAME || 'sessions',
+  ttl: 60 * 60 * 24 * 14,
+  stringify: false,
+})
+
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || 'fabil-dev-session-secret',
+    proxy: true,
+    resave: false,
+    saveUninitialized: false,
+    store: sessionStore,
+    cookie: {
+      // Cross-site frontend/backend auth requires SameSite=None + Secure cookies.
+      sameSite: useCrossSiteCookies ? 'none' : 'lax',
+      secure: isProduction,
+      httpOnly: true,
+      maxAge: 1000 * 60 * 60 * 24 * 14,
+    },
+  }),
+)
+app.use(passport.initialize())
+app.use(passport.session())
 
 const googleClientId = process.env.GOOGLE_CLIENT_ID
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET
@@ -287,10 +297,8 @@ app.get('/auth/google', (req, res, next) => {
   }
 
   const frontendOrigin = resolveFrontendOrigin(req)
-  const dynamicCallbackUrl = `${frontendOrigin}/auth/google/callback`
 
   req.session.oauthReturnTo = frontendOrigin
-  req.session.oauthCallbackUrl = dynamicCallbackUrl
 
   return req.session.save((saveError) => {
     if (saveError) {
@@ -310,7 +318,6 @@ app.get('/auth/google/callback', (req, res, next) => {
   }
 
   const returnTo = sanitizeFrontendUrl(req.session?.oauthReturnTo) || frontendUrl
-  const dynamicCallbackUrl = sanitizeFrontendUrl(req.session?.oauthCallbackUrl) || callbackUrl
 
   return passport.authenticate('google', {
     failureRedirect: `${returnTo}?auth=failed`,
@@ -318,7 +325,6 @@ app.get('/auth/google/callback', (req, res, next) => {
   })(req, res, () => {
     if (req.session) {
       delete req.session.oauthReturnTo
-      delete req.session.oauthCallbackUrl
 
       return req.session.save((saveError) => {
         if (saveError) {
