@@ -7,6 +7,7 @@ import MongoStore from 'connect-mongo'
 import passport from 'passport'
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20'
 import { randomUUID } from 'node:crypto'
+import crypto from 'node:crypto'
 import dns from 'node:dns'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -195,6 +196,52 @@ const googleClientId = process.env.GOOGLE_CLIENT_ID
 const googleClientSecret = process.env.GOOGLE_CLIENT_SECRET
 const authEnabled = Boolean(googleClientId && googleClientSecret)
 const callbackUrl = googleCallbackUrl
+const authTokenSecret = process.env.AUTH_TOKEN_SECRET || process.env.SESSION_SECRET || 'fabil-dev-session-secret'
+
+function createAuthToken(googleId) {
+  const payload = {
+    googleId,
+    exp: Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 14,
+  }
+
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url')
+  const signature = crypto.createHmac('sha256', authTokenSecret).update(encodedPayload).digest('base64url')
+  return `${encodedPayload}.${signature}`
+}
+
+function verifyAuthToken(token) {
+  if (typeof token !== 'string' || !token.includes('.')) {
+    return null
+  }
+
+  const [encodedPayload, providedSignature] = token.split('.')
+  if (!encodedPayload || !providedSignature) {
+    return null
+  }
+
+  const expectedSignature = crypto.createHmac('sha256', authTokenSecret).update(encodedPayload).digest('base64url')
+  const provided = Buffer.from(providedSignature)
+  const expected = Buffer.from(expectedSignature)
+
+  if (provided.length !== expected.length || !crypto.timingSafeEqual(provided, expected)) {
+    return null
+  }
+
+  try {
+    const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'))
+    if (!payload?.googleId || typeof payload.googleId !== 'string') {
+      return null
+    }
+
+    if (typeof payload.exp !== 'number' || payload.exp < Math.floor(Date.now() / 1000)) {
+      return null
+    }
+
+    return payload
+  } catch {
+    return null
+  }
+}
 
 function sanitizeFrontendUrl(value) {
   if (typeof value !== 'string' || !value.trim()) {
@@ -333,22 +380,39 @@ app.get('/auth/google/callback', (req, res, next) => {
 
         const successUrl = new URL(returnTo)
         successUrl.searchParams.set('auth', 'success')
+        if (req.user?.googleId) {
+          successUrl.searchParams.set('token', createAuthToken(req.user.googleId))
+        }
         return res.redirect(successUrl.toString())
       })
     }
 
     const successUrl = new URL(returnTo)
     successUrl.searchParams.set('auth', 'success')
+    if (req.user?.googleId) {
+      successUrl.searchParams.set('token', createAuthToken(req.user.googleId))
+    }
     return res.redirect(successUrl.toString())
   })
 })
 
-app.get('/auth/me', (req, res) => {
-  if (!req.user) {
+app.get('/auth/me', async (req, res) => {
+  let user = req.user || null
+
+  if (!user) {
+    const header = req.get('authorization') || ''
+    const token = header.startsWith('Bearer ') ? header.slice(7).trim() : ''
+    const payload = verifyAuthToken(token)
+
+    if (payload?.googleId) {
+      user = await users.findOne({ googleId: payload.googleId })
+    }
+  }
+
+  if (!user) {
     return res.status(200).json({ authenticated: false })
   }
 
-  const user = req.user
   return res.status(200).json({
     authenticated: true,
     user: {

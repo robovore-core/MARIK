@@ -49,6 +49,7 @@ type AppState = {
 }
 
 const STORAGE_KEY = 'fabil-book-club-v1'
+const AUTH_TOKEN_STORAGE_KEY = 'fabil-auth-token-v1'
 const DEFAULT_COMMENT_COLOR = '#a56cc7'
 const PAGE_CHARACTER_TARGET = 1600
 const API_BASE_URL = ((import.meta.env.VITE_API_BASE_URL as string | undefined) ?? '').trim().replace(/\/$/, '')
@@ -438,8 +439,16 @@ async function syncCatalog(clubs: Club[], userProfile: UserProfile, selectedClub
 }
 
 async function fetchAuthSession(): Promise<AuthResponse> {
+  const token = localStorage.getItem(AUTH_TOKEN_STORAGE_KEY)
+  const headers = token
+    ? {
+        Authorization: `Bearer ${token}`,
+      }
+    : undefined
+
   const response = await fetch(apiUrl('/auth/me'), {
     credentials: 'include',
+    headers,
   })
 
   if (!response.ok) {
@@ -509,7 +518,12 @@ function App() {
 
   useEffect(() => {
     const loadSession = async () => {
-      const authParam = new URLSearchParams(window.location.search).get('auth')
+      const searchParams = new URLSearchParams(window.location.search)
+      const authParam = searchParams.get('auth')
+      const tokenParam = searchParams.get('token')
+      if (tokenParam) {
+        localStorage.setItem(AUTH_TOKEN_STORAGE_KEY, tokenParam)
+      }
       const attempts = authParam === 'success' ? 8 : 3
 
       try {
@@ -521,6 +535,7 @@ function App() {
             if (authParam) {
               const cleanedUrl = new URL(window.location.href)
               cleanedUrl.searchParams.delete('auth')
+              cleanedUrl.searchParams.delete('token')
               window.history.replaceState({}, '', cleanedUrl.toString())
             }
 
@@ -535,9 +550,11 @@ function App() {
         }
 
         setAuthUser(null)
+        localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY)
       } catch (error) {
         console.error('Unable to load auth session.', error)
         setAuthUser(null)
+        localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY)
       } finally {
         setAuthLoading(false)
       }
@@ -1199,6 +1216,7 @@ function App() {
       setProfileMenuOpen(false)
       setAuthUser(null)
       setAuthLoading(false)
+      localStorage.removeItem(AUTH_TOKEN_STORAGE_KEY)
     }
   }
 
