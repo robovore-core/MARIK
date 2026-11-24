@@ -262,19 +262,36 @@ function sanitizeFrontendUrl(value) {
   }
 }
 
+function normalizeReturnToUrl(value) {
+  const sanitized = sanitizeFrontendUrl(value)
+  if (!sanitized) {
+    return null
+  }
+
+  try {
+    const parsed = new URL(sanitized)
+    if (appBasePath && appBasePath !== '/' && (parsed.pathname === '/' || parsed.pathname === '')) {
+      parsed.pathname = appBasePath
+    }
+    return `${parsed.origin}${parsed.pathname.replace(/\/+$/, '') || ''}`
+  } catch {
+    return sanitized
+  }
+}
+
 function resolveFrontendOrigin(req) {
-  const fromQuery = sanitizeFrontendUrl(req.query?.frontendUrl)
+  const fromQuery = normalizeReturnToUrl(req.query?.frontendUrl)
   if (fromQuery) {
     return fromQuery
   }
 
   const referer = req.get('referer')
-  const fromReferer = sanitizeFrontendUrl(referer)
+  const fromReferer = normalizeReturnToUrl(referer)
   if (fromReferer) {
     return fromReferer
   }
 
-  return frontendUrl
+  return normalizeReturnToUrl(frontendUrl) || frontendUrl
 }
 
 function toMemberId(displayName, email) {
@@ -364,7 +381,7 @@ app.get('/auth/google/callback', (req, res, next) => {
     return res.redirect(`${frontendUrl}?auth=disabled`)
   }
 
-  const returnTo = sanitizeFrontendUrl(req.session?.oauthReturnTo) || frontendUrl
+  const returnTo = normalizeReturnToUrl(req.session?.oauthReturnTo) || normalizeReturnToUrl(frontendUrl) || frontendUrl
 
   return passport.authenticate('google', {
     failureRedirect: `${returnTo}?auth=failed`,
