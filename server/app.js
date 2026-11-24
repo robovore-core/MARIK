@@ -38,6 +38,27 @@ function toOrigin(value) {
   }
 }
 
+function expandOriginVariants(origin) {
+  if (typeof origin !== 'string' || !origin.trim()) {
+    return []
+  }
+
+  try {
+    const parsed = new URL(origin)
+    const variants = new Set([parsed.origin])
+
+    if (parsed.hostname.startsWith('www.')) {
+      variants.add(`${parsed.protocol}//${parsed.hostname.slice(4)}${parsed.port ? `:${parsed.port}` : ''}`)
+    } else {
+      variants.add(`${parsed.protocol}//www.${parsed.hostname}${parsed.port ? `:${parsed.port}` : ''}`)
+    }
+
+    return [...variants]
+  } catch {
+    return [origin]
+  }
+}
+
 function normalizeBasePath(value) {
   if (typeof value !== 'string' || !value.trim()) {
     return ''
@@ -57,7 +78,7 @@ try {
   console.warn('Unable to apply custom DNS servers.', error)
 }
 
-const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
+const frontendUrl = process.env.FRONTEND_URL || 'https://robovore.com/marik'
 const googleCallbackUrl = process.env.GOOGLE_CALLBACK_URL || `${frontendUrl}/auth/google/callback`
 const frontendOrigin = toOrigin(frontendUrl)
 const callbackOrigin = toOrigin(googleCallbackUrl)
@@ -77,9 +98,8 @@ const appBasePath = configuredBasePath || frontendPathFromUrl
 const app = express()
 app.set('trust proxy', 1)
 const additionalOrigins = process.env.ADDITIONAL_CORS_ORIGINS?.split(',').map((origin) => origin.trim()).filter(Boolean) || []
-const allowedOrigins = [frontendUrl, toOrigin(frontendUrl), ...additionalOrigins, ...additionalOrigins.map(toOrigin)].filter(
-  (value, index, list) => Boolean(value) && list.indexOf(value) === index,
-)
+const originSeeds = [toOrigin(frontendUrl), ...additionalOrigins.map(toOrigin)].filter(Boolean)
+const allowedOrigins = [...new Set(originSeeds.flatMap((origin) => expandOriginVariants(origin)))].filter(Boolean)
 
 if (appBasePath) {
   app.use((req, _res, next) => {
