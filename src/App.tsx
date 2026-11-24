@@ -139,6 +139,15 @@ function normalizeBasePath(pathname: string): string {
 
 function frontendBaseUrl(): string {
   const basePath = normalizeBasePath(window.location.pathname)
+
+  if (
+    basePath === '/' &&
+    window.location.hostname !== 'localhost' &&
+    window.location.hostname !== '127.0.0.1'
+  ) {
+    return `${window.location.origin}/marik`
+  }
+
   return `${window.location.origin}${basePath === '/' ? '' : basePath}`
 }
 

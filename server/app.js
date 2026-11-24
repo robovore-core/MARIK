@@ -87,7 +87,8 @@ const callbackOrigin = toOrigin(googleCallbackUrl)
 const useCrossSiteCookies = Boolean(
   isProduction && frontendOrigin && callbackOrigin && frontendOrigin !== callbackOrigin,
 )
-const configuredBasePath = normalizeBasePath(process.env.APP_BASE_PATH || '')
+const defaultAppBasePath = '/marik'
+const configuredBasePath = normalizeBasePath(process.env.APP_BASE_PATH || defaultAppBasePath)
 const frontendPathFromUrl = (() => {
   try {
     const parsed = new URL(frontendUrl)
@@ -97,6 +98,7 @@ const frontendPathFromUrl = (() => {
   }
 })()
 const appBasePath = configuredBasePath || frontendPathFromUrl
+const canonicalAppPath = appBasePath || '/marik'
 const app = express()
 app.set('trust proxy', 1)
 const additionalOrigins = process.env.ADDITIONAL_CORS_ORIGINS?.split(',').map((origin) => origin.trim()).filter(Boolean) || []
@@ -270,8 +272,8 @@ function normalizeReturnToUrl(value) {
 
   try {
     const parsed = new URL(sanitized)
-    if (appBasePath && appBasePath !== '/' && (parsed.pathname === '/' || parsed.pathname === '')) {
-      parsed.pathname = appBasePath
+    if (canonicalAppPath && canonicalAppPath !== '/' && (parsed.pathname === '/' || parsed.pathname === '' || parsed.pathname === '/index.html')) {
+      parsed.pathname = canonicalAppPath
     }
     return `${parsed.origin}${parsed.pathname.replace(/\/+$/, '') || ''}`
   } catch {
