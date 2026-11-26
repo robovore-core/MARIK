@@ -281,6 +281,23 @@ function normalizeReturnToUrl(value) {
   }
 }
 
+function toCanonicalAppUrl(value) {
+  const normalized = normalizeReturnToUrl(value)
+  if (!normalized) {
+    return null
+  }
+
+  try {
+    const parsed = new URL(normalized)
+    parsed.pathname = canonicalAppPath || '/marik'
+    parsed.search = ''
+    parsed.hash = ''
+    return `${parsed.origin}${parsed.pathname.replace(/\/+$/, '') || ''}`
+  } catch {
+    return normalized
+  }
+}
+
 function resolveFrontendOrigin(req) {
   const fromQuery = normalizeReturnToUrl(req.query?.frontendUrl)
   if (fromQuery) {
@@ -383,7 +400,8 @@ app.get('/auth/google/callback', (req, res, next) => {
     return res.redirect(`${frontendUrl}?auth=disabled`)
   }
 
-  const returnTo = normalizeReturnToUrl(req.session?.oauthReturnTo) || normalizeReturnToUrl(frontendUrl) || frontendUrl
+  const returnTo =
+    toCanonicalAppUrl(req.session?.oauthReturnTo) || toCanonicalAppUrl(frontendUrl) || 'https://robovore.com/marik'
 
   return passport.authenticate('google', {
     failureRedirect: `${returnTo}?auth=failed`,
